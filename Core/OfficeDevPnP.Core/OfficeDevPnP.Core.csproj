@@ -443,8 +443,8 @@
     <Reference Include="System.Memory, Version=4.0.1.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Memory.4.5.4\lib\net461\System.Memory.dll</HintPath>
     </Reference>
-	<Reference Include="System.Net.Http" />
-	<Reference Include="System.Net.Http.Formatting, Version=5.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Net.Http.Formatting, Version=5.2.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\Microsoft.AspNet.WebApi.Client.5.2.3\lib\net45\System.Net.Http.Formatting.dll</HintPath>
     </Reference>
@@ -1367,6 +1367,7 @@
     <Compile Include="Utilities\RESTUtilities.cs" />
     <Compile Include="Utilities\REST\ResultCollection.cs" />
     <Compile Include="Utilities\StringUtilities.cs" />
+    <Compile Include="Utilities\SymmetricKeyIssuerNameRegistryExtended.cs" />
     <Compile Include="Utilities\Themes\Palettes\Color.cs" />
     <Compile Include="Utilities\Themes\Palettes\Colors.cs" />
     <Compile Include="Utilities\Themes\Palettes\ColorValues.cs" />

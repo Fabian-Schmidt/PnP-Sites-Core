@@ -29,7 +29,7 @@ namespace OfficeDevPnP.Core.Utilities
 {
     internal static class TokenHelper
     {
-#region public fields
+        #region public fields
 
         /// <summary>
         /// SharePoint principal.
@@ -41,9 +41,9 @@ namespace OfficeDevPnP.Core.Utilities
         /// </summary>
         public static readonly TimeSpan HighTrustAccessTokenLifetime = TimeSpan.FromHours(12.0);
 
-#endregion public fields
+        #endregion public fields
 
-#region public methods
+        #region public methods
 
         /// <summary>
         /// Retrieves the context token string from the specified request by looking for well-known parameter names in the
@@ -712,9 +712,9 @@ namespace OfficeDevPnP.Core.Utilities
             return url;
         }
 
-#endregion
+        #endregion
 
-#region private fields
+        #region private fields
 
         //
         // Configuration Constants
@@ -741,12 +741,12 @@ namespace OfficeDevPnP.Core.Utilities
         private static string secondaryClientSecret = null;
         private static string realm = null;
         private static string serviceNamespace = null;
-		private static string identityClaimType = null;
-		private static string trustedIdentityTokenIssuerName = null;
-		//
-		// Environment Constants
-		//
-		private static string acsHostUrl = "accesscontrol.windows.net";
+        private static string identityClaimType = null;
+        private static string trustedIdentityTokenIssuerName = null;
+        //
+        // Environment Constants
+        //
+        private static string acsHostUrl = "accesscontrol.windows.net";
         private static string globalEndPointPrefix = "accounts";
 
         public static string AcsHostUrl
@@ -997,9 +997,9 @@ namespace OfficeDevPnP.Core.Utilities
             }
         }
 
-#endregion
+        #endregion
 
-#region private methods
+        #region private methods
 
         private static ClientContext CreateAcsClientContextForUrl(SPRemoteEventProperties properties, Uri sharepointUrl)
         {
@@ -1048,6 +1048,32 @@ namespace OfficeDevPnP.Core.Utilities
             }
         }
 
+        private static bool ClientSecretIsBase64OldFormat(string secret)
+        {
+            return !string.IsNullOrEmpty(secret) && secret.EndsWith("=");
+        }
+
+        private static readonly object _AcsSigningCerts_LockObject = new object();
+        private static X509Certificate2[] _AcsSigningCerts;
+
+        private static X509Certificate2[] GetAcsSigningCerts_Cached()
+        {
+            if (_AcsSigningCerts == null)
+            {
+                lock (_AcsSigningCerts_LockObject)
+                {
+                    if (_AcsSigningCerts == null)
+                    {
+                        // Assumption: All tenants (realms) use the same signing cert in ACS.
+                        // Use `microsoft.com` to fetch ACS signing cert.
+                        _AcsSigningCerts = AcsMetadataParser.GetAcsSigningCerts("microsoft.com");
+                    }
+                }
+            }
+
+            return _AcsSigningCerts;
+        }
+
         public static JsonWebSecurityTokenHandler CreateJsonWebSecurityTokenHandler()
         {
             JsonWebSecurityTokenHandler handler = new JsonWebSecurityTokenHandler();
@@ -1056,8 +1082,11 @@ namespace OfficeDevPnP.Core.Utilities
             handler.Configuration.CertificateValidator = X509CertificateValidator.None;
 
             List<byte[]> securityKeys = new List<byte[]>();
-            securityKeys.Add(Convert.FromBase64String(ClientSecret));
-            if (!string.IsNullOrEmpty(SecondaryClientSecret))
+            if (ClientSecretIsBase64OldFormat(ClientSecret))
+            {
+                securityKeys.Add(Convert.FromBase64String(ClientSecret));
+            }
+            if (!string.IsNullOrEmpty(SecondaryClientSecret) && ClientSecretIsBase64OldFormat(SecondaryClientSecret))
             {
                 securityKeys.Add(Convert.FromBase64String(SecondaryClientSecret));
             }
@@ -1065,14 +1094,24 @@ namespace OfficeDevPnP.Core.Utilities
             List<SecurityToken> securityTokens = new List<SecurityToken>();
             securityTokens.Add(new MultipleSymmetricKeySecurityToken(securityKeys));
 
+            var acsSignCerts = GetAcsSigningCerts_Cached();
+            foreach (var acsSignCert in acsSignCerts)
+            {
+                securityTokens.Add(new X509SecurityToken(acsSignCert));
+            }
+
             handler.Configuration.IssuerTokenResolver =
                 SecurityTokenResolver.CreateDefaultSecurityTokenResolver(
                 new ReadOnlyCollection<SecurityToken>(securityTokens),
                 false);
-            SymmetricKeyIssuerNameRegistry issuerNameRegistry = new SymmetricKeyIssuerNameRegistry();
+            var issuerNameRegistry = new SymmetricKeyIssuerNameRegistryExtended();
             foreach (byte[] securitykey in securityKeys)
             {
                 issuerNameRegistry.AddTrustedIssuer(securitykey, GetAcsPrincipalName(ServiceNamespace));
+            }
+            foreach (var acsSignCert in acsSignCerts)
+            {
+                issuerNameRegistry.AddTrustedIssuer(acsSignCert, GetAcsPrincipalName(ServiceNamespace));
             }
             handler.Configuration.IssuerNameRegistry = issuerNameRegistry;
             return handler;
@@ -1128,17 +1167,17 @@ namespace OfficeDevPnP.Core.Utilities
         }
 
         private static JsonWebTokenClaim[] GetClaimsWithClaimsIdentity(System.Security.Claims.ClaimsIdentity identity, string identityClaimType, string trustedProviderName)
-		{
-			var identityClaim = identity.Claims.Where(c => string.Equals(c.Type, identityClaimType, StringComparison.InvariantCultureIgnoreCase)).First();
-			JsonWebTokenClaim[] claims = new JsonWebTokenClaim[]
-			{
-				new JsonWebTokenClaim(NameIdentifierClaimType, identityClaim.Value),
-				new JsonWebTokenClaim("nii", "trusted:" + trustedProviderName)
-			};
-			return claims;
-		}
+        {
+            var identityClaim = identity.Claims.Where(c => string.Equals(c.Type, identityClaimType, StringComparison.InvariantCultureIgnoreCase)).First();
+            JsonWebTokenClaim[] claims = new JsonWebTokenClaim[]
+            {
+                new JsonWebTokenClaim(NameIdentifierClaimType, identityClaim.Value),
+                new JsonWebTokenClaim("nii", "trusted:" + trustedProviderName)
+            };
+            return claims;
+        }
 
-		private static string IssueToken(
+        private static string IssueToken(
             string sourceApplication,
             string issuerApplication,
             string sourceRealm,
@@ -1154,7 +1193,7 @@ namespace OfficeDevPnP.Core.Utilities
                 throw new InvalidOperationException("SigningCredentials was not initialized");
             }
 
-#region Actor token
+            #region Actor token
 
             string issuer = string.IsNullOrEmpty(sourceRealm) ? issuerApplication : string.Format("{0}@{1}", issuerApplication, sourceRealm);
             string nameid = string.IsNullOrEmpty(sourceRealm) ? sourceApplication : string.Format("{0}@{1}", sourceApplication, sourceRealm);
@@ -1184,9 +1223,9 @@ namespace OfficeDevPnP.Core.Utilities
                 return actorTokenString;
             }
 
-#endregion Actor token
+            #endregion Actor token
 
-#region Outer token
+            #region Outer token
 
             List<JsonWebTokenClaim> outerClaims = null == claims ? new List<JsonWebTokenClaim>() : new List<JsonWebTokenClaim>(claims);
             outerClaims.Add(new JsonWebTokenClaim(ActorTokenClaimType, actorTokenString));
@@ -1200,30 +1239,37 @@ namespace OfficeDevPnP.Core.Utilities
 
             string accessToken = new JsonWebSecurityTokenHandler().WriteTokenAsString(jsonToken);
 
-#endregion Outer token
+            #endregion Outer token
 
             return accessToken;
         }
 
-#endregion
+        #endregion
 
-#region AcsMetadataParser
+        #region AcsMetadataParser
 
         // This class is used to get MetaData document from the global STS endpoint. It contains
         // methods to parse the MetaData document and get endpoints and STS certificate.
         public static class AcsMetadataParser
         {
-            public static X509Certificate2 GetAcsSigningCert(string realm)
+            public static X509Certificate2[] GetAcsSigningCerts(string realm)
             {
-                JsonMetadataDocument document = GetMetadataDocument(realm);
+                var document = GetMetadataDocument(realm);
 
                 if (null != document.keys && document.keys.Count > 0)
                 {
-                    JsonKey signingKey = document.keys[0];
-
-                    if (null != signingKey && null != signingKey.keyValue)
+                    var certs = new List<X509Certificate2>();
+                    foreach (var signingKey in document.keys)
                     {
-                        return new X509Certificate2(Encoding.UTF8.GetBytes(signingKey.keyValue.value));
+                        if (null != signingKey && null != signingKey.keyValue)
+                        {
+                            certs.Add(new X509Certificate2(Encoding.UTF8.GetBytes(signingKey.keyValue.value)));
+                        }
+                    }
+
+                    if (certs.Count > 0)
+                    {
+                        return certs.ToArray();
                     }
                 }
 
@@ -1308,7 +1354,7 @@ namespace OfficeDevPnP.Core.Utilities
             }
         }
 
-#endregion
+        #endregion
     }
 
     /// <summary>
@@ -1616,7 +1662,7 @@ namespace OfficeDevPnP.Core.Utilities
         private DateTime effectiveTime;
         private List<SecurityKey> securityKeys;
 
-#endregion
+        #endregion
     }
 }
 #else
